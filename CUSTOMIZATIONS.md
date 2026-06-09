@@ -1,257 +1,238 @@
-# El Sombrero - Custom Ride Modifications
+# El Sombrero, custom ride notes
 
-A custom OpenRCT2 flat ride built on the **Enterprise** ride type, reworked to
-behave like the real *El Sombrero* ride at Six Flags: it spins flat (with the
-usual start/stop/acceleration) instead of tilting up to vertical, and it wears a
-tall painted sombrero in the center of the wheel.
+This is a custom OpenRCT2 flat ride based on the Enterprise. It spins flat like
+the real El Sombrero at Six Flags does, with the usual start, stop, and speed up,
+instead of tilting all the way up to vertical. And it has a big painted sombrero
+in the middle of the wheel.
 
-This document records the custom behaviors we built on top of the stock
-Enterprise, *why* each was needed, and *how* each works - so the build can be
-understood and tuned later.
+These notes cover what we changed, why, and how, so it's easy to come back and
+tweak later.
 
----
+## The short version
 
-## TL;DR - what's customized
+There are four custom things going on, and they all live in `build_parkobj.py`.
 
-| # | Behavior | Where | One-line how |
-|---|----------|-------|--------------|
-| 1 | **Flat spin (no tilt to vertical)** | `build_parkobj.py` tilt-cap block | Substitute high-tilt wheel sprites with a capped tilt band |
-| 2 | **Smooth spin at all speeds** | same block | Use the *true* 12-frame tilt-band period so rotation phase is preserved |
-| 3 | **No riders clipping the sombrero** | `build_parkobj.py` overlay block | Blank only the back-arc seated-rider overlays (by screen position) |
-| 4 | **Concrete pad + moving shadow** | `build_parkobj.py` `stamp_world_pad` | Stamp a flat concrete lip under every wheel frame, world-static, with a per-frame ride shadow projected onto it |
+| # | What it does | How |
+|---|------|------|
+| 1 | Spins flat, no tilt to vertical | Swap the steep tilt frames for a capped tilt band |
+| 2 | Stays smooth at any speed | Use the real 12 frame tilt band length so the rotation never jumps |
+| 3 | Riders don't poke through the sombrero | Hide just the back of the ring of seated riders, picked by screen position |
+| 4 | Concrete pad with a moving shadow | Stamp a flat concrete lip under every wheel frame, and paint a shadow on it that moves with the spin |
 
-Customizations 1-3 are implemented purely in the **build script** by remapping
-which source PNG each sprite slot uses; `manifest.json`, `object.json`, and the
-source art in `sprites/` are **never modified on disk**. Customization 4 adds a
-small piece of source art in `_padart/`. Every change is reversible by editing
+The first three just remap which source PNG each sprite uses, so the art files,
+`manifest.json`, and `object.json` never change on disk. The fourth one adds a
+little art file in `_padart/`. Anything here is easy to undo by editing
 `build_parkobj.py` and rebuilding.
 
----
+## How the build works
 
-## Background: how this object is built
+`build_parkobj.py` does this.
 
-`build_parkobj.py` packs the ride:
+1. Reads `manifest.json`, which is 247 sprite entries, each with a source PNG and
+   an x and y offset.
+2. Remaps some of those entries to point at different frames. This is where all
+   the custom stuff happens.
+3. Converts every PNG to the RCT2 game palette with `to_palette_png`, using the
+   matching `_base_sprites/` frame so the wheel and car pixels keep their
+   recolorable indices while the painted hat stays put.
+4. Runs `openrct2 sprite build` to make `images.dat`.
+5. Zips `object.json` and `images.dat` into `el_sombrero.parkobj` and copies it
+   into `~/Library/Application Support/OpenRCT2/object`.
 
-1. Reads `manifest.json` (247 sprite entries → source PNG + x/y offset per frame).
-2. Optionally **remaps** some entries to different source frames (this is where
-   all our customization lives).
-3. Palette-converts each PNG to the RCT2 game palette (`to_palette_png`), using
-   the matching `_base_sprites/` frame as a reference so original wheel/car
-   pixels keep their recolorable indices while the painted hat stays fixed.
-4. Calls `openrct2 sprite build` to produce `images.dat`.
-5. Zips `object.json` + `images.dat` into `el_sombrero.parkobj` and installs it
-   to `~/Library/Application Support/OpenRCT2/object`.
+Run it with `python3 build_parkobj.py`.
 
-Run it with:
+## The frame layout
 
-```bash
-python3 build_parkobj.py
-```
+Figuring out the frame layout is what made all of this possible.
 
----
+| Frames | What they are |
+|--------|------|
+| 0 to 2 | Preview, metadata, and a tiny transparent placeholder (frame 1) |
+| 3 to 30 | Flat wheel, used when the ride is stopped or slow |
+| 31 to 198 | 14 tilt bands, 12 rotation frames each (more below) |
+| 199 to 246 | Seated riders, drawn on top of the wheel for each filled seat |
 
-## Sprite frame layout (the key reference)
+### The tilt bands
 
-Understanding the frame layout is what made the customizations possible.
+The wheel's tilt, from flat to almost vertical, is stored as 14 bands. Each band
+has 12 rotation frames, and they sit on a grid starting at frame 31. So band b
+(0 through 13) is frames `31 + b*12` through `31 + b*12 + 11`.
 
-| Frame range | Contents |
-|-------------|----------|
-| `000-002` | Preview / metadata / 1×1 transparent placeholder (`001`) |
-| `003-030` | **Flat region** - wheel horizontal (used when stopped / slow) |
-| `031-198` | **14 tilt bands of 12 rotation frames each** (see below) |
-| `199-246` | **Seated-rider overlays** - drawn on top of the wheel per occupied seat |
+A couple of things to know.
 
-### The tilt bands (frames 031-198)
+- Tilt is the slow loop and rotation is the fast loop. Inside one band the tilt
+  stays the same and the 12 frames are 12 steps of rotation.
+- You can see it in the sprite widths. The wheel ellipse gets narrower as it
+  tilts, and the width stays flat for exactly 12 frames before it steps, at
+  frames 31, 43, 55, 67, and so on.
+- Because of that, the matching rotation step in any two bands is always 12
+  frames apart, which is the whole trick behind the smooth spin fix.
 
-The wheel's tilt (horizontal → near-vertical) is stored as **14 bands**, each
-containing **12 rotation frames**, on a grid starting at frame **31**:
+The game still works out the tilt and rotation on its own and asks for a frame
+number. All we do is change what art that frame number points at.
 
-```
-band b (0..13)  =  frames  31 + b*12  ..  31 + b*12 + 11
-```
+## Custom things 1 and 2, flat spin that stays smooth
 
-- **Tilt is the outer loop, rotation the inner loop**: within a band the tilt is
-  constant and the 12 consecutive frames are 12 consecutive rotation steps.
-- Verified empirically: sprite *width* (the wheel ellipse narrowing as it tilts)
-  holds constant for exactly 12 frames, then steps - at frames 31, 43, 55, 67, …
-- This is why corresponding rotation steps in different bands are exactly **12
-  frames apart** - the fact that makes the phase-preserving remap work.
+The stock Enterprise tilts its wheel up toward vertical as it spins, but the real
+El Sombrero stays flat. The tilt is baked into the game and no `object.json`
+setting turns it off. What we can do is make every steep tilt frame draw a
+flatter one, so the wheel never looks like it tilts past the amount we pick.
 
-The OpenRCT2 sim still computes tilt/rotation the stock way and asks for a frame
-index; we only change *which art* those indices point to.
+There was a fun bug along the way. The first try assumed tilt bands were 32 frames
+and remapped with `% 32`. But the bands are really 12 frames, so at full speed,
+when the game sits in the top band and cycles its 12 frames, the `% 32` math reset
+the rotation every 12th frame. The spin stuttered and looked like it was running
+backwards. The fix was to use the real 12 frame length, so each steep frame maps
+to the same rotation step in the capped band and the spin stays in phase.
 
----
-
-## Customization 1 & 2 - Flat spin, smooth at all speeds
-
-**Problem.** The stock Enterprise tilts its wheel up toward vertical as it spins.
-The real El Sombrero only spins flat. The tilt is **hardcoded in the sim** and
-can't be disabled by any `object.json` property - but we *can* make every
-high-tilt frame draw a low-tilt sprite, so the wheel never *appears* to tilt past
-a chosen amount.
-
-**Subtlety (the jitter bug).** A first version assumed 32-frame tilt stages and
-remapped with `% 32`. Because the bands are actually **12** frames, at full speed
-(when the sim parks in the top tilt band and cycles its 12 frames) the `% 32`
-math reset the rotation phase every 12th frame - making the spin visibly
-**jitter / appear to stutter or run backwards**. The fix was to use the true
-12-frame period so each high-tilt frame maps to the **same rotation step** in the
-capped band, preserving phase exactly.
-
-**Implementation** (`build_parkobj.py`):
+Here's the code.
 
 ```python
 BAND_ORIGIN = 31
 BAND_LEN    = 12
-CAP_BAND    = 2          # frames 55..66 - the gentle fan-out tilt we settled on
+CAP_BAND    = 2          # frames 55 to 66, the gentle fan out we settled on
 cap_start   = BAND_ORIGIN + CAP_BAND * BAND_LEN   # = 55
 for i in range(cap_start + BAND_LEN, 199):        # remap bands above CAP_BAND
     phase = (i - BAND_ORIGIN) % BAND_LEN
     manifest[i] = dict(manifest[cap_start + phase])
 ```
 
-Result: tilt ramps up naturally to band `CAP_BAND` as the ride accelerates, then
-holds there; the 12 rotation frames cycle cleanly (no backward jump) at any spin
-speed.
+The tilt ramps up to band `CAP_BAND` as the ride speeds up, then holds there, and
+the 12 rotation frames keep cycling cleanly at any speed.
 
 ### Tuning the tilt
 
-`CAP_BAND` is the single knob:
+`CAP_BAND` is the only knob.
 
-| `CAP_BAND` | Frames shown at max | Look |
-|-----------|---------------------|------|
-| `0` | 31-42 | Almost flat, very slight fan-out |
-| `1` | 43-54 | Slight tilt |
-| `2` *(current)* | 55-66 | Gentle/moderate fan-out |
-| `3`+ | 67-78 … | Progressively more tilt (toward stock) |
+| `CAP_BAND` | Frames at max tilt | Look |
+|------------|------|------|
+| 0 | 31 to 42 | Almost flat, barely any fan out |
+| 1 | 43 to 54 | Slight tilt |
+| 2 (current) | 55 to 66 | Gentle fan out |
+| 3 and up | 67 to 78 and beyond | More and more tilt, toward stock |
 
-> **Note - strobe effect:** at very high spin speed the wheel may *appear* to
-> rotate backwards. That's a true aliasing/wagon-wheel effect of 12 discrete
-> rotation steps spinning fast, **not** the phase bug - it isn't fixable by
-> remapping.
+One heads up. At very high speed the wheel can look like it spins backwards.
+That's just a strobe effect from 12 rotation steps going fast, like a wagon wheel
+in a movie. It isn't the phase bug and you can't fix it by remapping.
 
----
+## Custom thing 3, hide only the riders that clip the sombrero
 
-## Customization 3 - Hide only the riders that clip the sombrero
+Seated riders are drawn as little sprites for each seat, frames 199 to 246,
+painted after the wheel. The riders on the back of the wheel land high on the
+screen, right over the tall cone, so they show up in front of the hat with their
+heads floating on it.
 
-**Problem.** Seated riders are drawn as per-seat **overlay sprites** (frames
-199-246) painted *after* the wheel. Riders on the **back arc** of the wheel land
-high on screen, right over the tall sombrero cone, so they render *in front of*
-the hat - heads/bodies floating on the cone.
+The obvious fixes don't work.
 
-**Why the obvious fixes don't work:**
-- `drawOrder` (tried 0, 6, 7, 14, 15) only affects vehicle-vs-vehicle layering,
-  not rider occlusion. No effect.
-- Per-pixel / per-sprite occlusion flags don't exist in the RCT2 format.
-- The plugin API exposes neither a guest's seat index, the camera rotation, nor
-  any per-guest hide flag - so a script can't selectively hide riders either.
-- Hiding **all** riders works (blank all of 199-246) but leaves every seat
-  looking empty.
+- `drawOrder` (we tried 0, 6, 7, 14, 15) only changes how ride pieces layer
+  against each other, not against riders. No help.
+- RCT2 has no per pixel or per sprite flag for this.
+- The plugin API doesn't expose a guest's seat, the camera angle, or any way to
+  hide one guest, so a script can't pick them out either.
+- Hiding every rider works, but then all the seats look empty.
 
-**The unlock.** Each overlay frame has a **fixed baked screen position** (its
-`manifest` y-offset). The engine assigns a frame to each seat via
-`spin + CurrentRotation*4 + seatRotation`, so **whichever seat is currently at
-the back always gets a back-position frame** - automatically, for every camera
-rotation and throughout the spin. Therefore we can hide *only the back-arc
-frames* (those with a negative/high screen y, up by the cone) and:
+The thing that does work. Each rider frame has a fixed spot on the screen baked
+into it, its y offset. The game picks which frame a seat uses from
+`spin + CurrentRotation*4 + seatRotation`, so whichever seat is at the back always
+gets a back frame, on its own, for every camera angle and all through the spin. So
+we hide just the back frames, the ones up near the cone, and:
 
-- far-side riders never clip the hat (they're simply not drawn),
-- near-side riders stay visible,
-- the back of those far cars faces the camera anyway, so nothing looks missing,
-- it's correct under **all 4 camera rotations** without knowing any seat index.
+- the far riders never clip the hat because they simply aren't drawn,
+- the near riders still show,
+- the far cars have their backs to you anyway, so nothing looks missing,
+- and it's right from all 4 camera angles without ever knowing a seat number.
 
-**Implementation** (`build_parkobj.py`):
+Here's the code.
 
 ```python
-BACK_ARC_Y_CUTOFF = 0    # blank overlays sitting at/above this screen y (near cone)
+BACK_ARC_Y_CUTOFF = 0    # hide rider frames at or above this screen y (near the cone)
 for i in range(199, 247):
     if manifest[i]["y"] < BACK_ARC_Y_CUTOFF:
-        manifest[i] = dict(manifest[1])   # 1×1 transparent placeholder → hidden
-    # else: front/near arc, clear of the cone - keep the original rider overlay
+        manifest[i] = dict(manifest[1])   # tiny transparent placeholder, so it's hidden
+    # otherwise it's a front rider, clear of the cone, so leave it alone
 ```
 
-With the cutoff at `0`, this hides 21 back-arc frames and keeps 27 front frames:
+With the cutoff at 0 this hides 21 back frames and keeps 27 front ones.
 
-- **Hidden:** 202-208, 218-224, 234-240
-- **Kept:** 199-201, 209-217, 225-233, 241-246
+- Hidden: 202 to 208, 218 to 224, 234 to 240
+- Kept: 199 to 201, 209 to 217, 225 to 233, 241 to 246
 
-### Tuning the rider hiding
+### Tuning the riders
 
-`BACK_ARC_Y_CUTOFF` is the knob: **lower** it (e.g. `-5`) if a side car still
-nicks the cone's brim; **raise** it (e.g. `+5`) if too many riders disappear.
+`BACK_ARC_Y_CUTOFF` is the knob. Lower it (say to -5) if a side car still nicks
+the brim of the cone. Raise it (say to 5) if too many riders vanish.
 
----
+## Custom thing 4, a concrete pad with a moving shadow
 
-## Customization 4 - Concrete pad with a moving shadow
+The goal was to sit the ride on a light concrete pad instead of bare dirt.
 
-**Goal.** Sit the ride on a light concrete pad instead of bare dirt.
+The catch is that a pad baked into the wheel sprite only shows up if it stays
+inside the ride's own footprint tiles. A big ground circle spills onto the
+neighboring tiles, and their ground gets painted after the ride and covers it.
+The wheel itself is fine because it's up in the air, but anything at ground level
+that spills out gets hidden. So the pad has to hug the wheel. It's really just the
+front lip of a pad that you can see, not a whole plaza.
 
-**The hard constraint.** A pad baked into the wheel sprite only renders if it
-stays **within the ride's own footprint tiles**. A large ground ellipse spills
-onto neighboring tiles, whose ground is painted *after* the ride sprite and
-covers it (the elevated wheel escapes this; a ground-level pad does not). So the
-pad has to hug the wheel - it's the **visible front lip** of a pad, not a full
-plaza.
+The art started as a hand painted lip, then got boiled down to one world
+positioned template. `_padart/world_pad.png` holds the lip's shape and
+`_padart/world_pad.json` holds where it sits in world coordinates. Only the shape
+gets used. It's filled with flat concrete when the build runs.
 
-**The art.** The lip shape was hand-painted, then reduced to a single
-world-positioned template: `_padart/world_pad.png` (the lip's alpha shape) plus
-`_padart/world_pad.json` (its origin in world/offset coordinates). Only the
-*shape* is used - it's filled with flat concrete at build time.
+The build does this in `stamp_world_pad`, on wheel frames 3 to 198, after the
+palette step so the cars keep their recoloring.
 
-**The build** (`stamp_world_pad`, applied to wheel frames 3-198): after palette
-conversion (so the cars keep their remap/recolour indices), for each frame it
+1. Fill the lip shape with flat concrete (`PAD_BASE_RGB`) at its fixed world spot
+   (`world_origin - frame_offset`), so it stays put while the wheel spins.
+2. Paint the ride's shadow onto the lip by taking this frame's wheel shape,
+   shifting it by `SHADOW_SHIFT`, and darkening the lip there with
+   `RIDE_SHADOW_RGB`. Because the wheel shape rotates frame to frame, the shadow
+   sweeps across the pad.
+3. Lay the wheel and cars back on top so they cover the lip wherever they overlap.
 
-1. fills the lip shape with flat concrete (`PAD_BASE_RGB`), placed at its fixed
-   world position (`world_origin - frame_offset`), so it's **static** as the
-   wheel spins;
-2. casts the **ride's shadow** onto the lip by projecting *this frame's* wheel
-   silhouette by `SHADOW_SHIFT` and darkening the lip there (`RIDE_SHADOW_RGB`) -
-   because the silhouette rotates frame to frame, the shadow **sweeps**;
-3. lays the wheel/cars back on top so they occlude the lip where they overlap.
-
-This keeps the concrete static (it's the ground) while the shadow is dynamic (the
-ride above it moves) - and never touches the car pixels, so no recolour is lost.
+So the concrete stays still, because it's the ground, while the shadow moves,
+because the ride above it moves. And none of this touches the car pixels, so the
+cars still recolor.
 
 ### Tuning
 
-- `SHADOW_SHIFT = (-3, 6)` - shadow direction/length (down-left). Bigger `y`
-  exposes more lit concrete beyond the shadow, making the motion more visible.
-- `RIDE_SHADOW_RGB` / `PAD_BASE_RGB` - shadow darkness / concrete shade.
-- `USE_WORLD_PAD = False` disables the pad entirely.
+- `SHADOW_SHIFT = (-3, 6)` sets the shadow's direction and length, down and to
+  the left. A bigger y shows more lit concrete past the shadow, so the movement
+  reads better.
+- `RIDE_SHADOW_RGB` and `PAD_BASE_RGB` set how dark the shadow is and how light
+  the concrete is.
+- `USE_WORLD_PAD = False` turns the pad off completely.
 
-> The pad template in `_padart/` is regenerated from hand-painted frames by a
-> one-off extraction (union of the painted frames in world coordinates); the
-> committed `world_pad.png` is the result, so normal rebuilds just reuse it.
+The template in `_padart/` was made once by pulling the hand painted lip out of a
+handful of frames and merging them in world coordinates. The merged `world_pad.png`
+is checked in, so normal rebuilds just reuse it.
 
-## Verification checklist
+## Quick check after building
 
-After `python3 build_parkobj.py`, reload in OpenRCT2 (close/reopen the park, or
-remove + re-place the ride) and confirm:
+Run `python3 build_parkobj.py`, reload in OpenRCT2 (close and reopen the park, or
+remove and replace the ride), and look for these.
 
-1. **Tilt:** wheel ramps to the gentle fan-out and holds - never flips to
+1. Tilt. The wheel ramps to the gentle fan out and holds. It never flips to
    vertical.
-2. **Smooth spin:** through full acceleration → top speed → deceleration, the
-   spin is steady with no periodic jitter.
-3. **Riders, loading:** near/front cars show riders; back arc shows none and
-   nothing clips the cone.
-4. **Camera rotation:** rotate through all 4 angles - "no rider behind the cone"
-   holds in every view (the key robustness check).
-5. **Riders, spinning:** riders appear on the front arc and disappear behind the
-   cone as they orbit (reads as correct occlusion).
+2. Smooth spin. Speed it up to full and back down. The spin stays steady, no
+   stutter.
+3. Riders loading. The front cars show riders, the back shows none, and nothing
+   clips the cone.
+4. Camera angles. Rotate through all 4. The back riders stay hidden in every
+   view. This is the important one.
+5. Riders spinning. Riders show on the front and vanish behind the cone as they
+   go around, which looks like proper occlusion.
 
----
+## The files
 
-## Files
+| File | What it is | Did we change it |
+|------|------|------|
+| `build_parkobj.py` | The build script, where all the custom stuff lives | yes |
+| `manifest.json` | The source PNG and offset for each frame | no |
+| `object.json` | The ride definition, like ride type, seats, and colors | no |
+| `sprites/` | The source art for the wheel, hat, and riders | no |
+| `_base_sprites/` | The original Enterprise frames, used as a palette reference | no |
+| `_padart/` | The concrete pad shape | yes, added |
+| `el_sombrero.parkobj` | The packed ride that gets installed | generated |
 
-| File | Role | Modified by us? |
-|------|------|-----------------|
-| `build_parkobj.py` | Build script - **all customization lives here** | ✅ yes |
-| `manifest.json` | Per-frame source PNG + offset | ❌ no |
-| `object.json` | Ride definition (`type: enterprise`, seats, colors…) | ❌ no |
-| `sprites/` | Source art (wheel, hat, riders, peeps) | ❌ no |
-| `_base_sprites/` | Original ENTERP frames (palette reference) | ❌ no |
-| `el_sombrero.parkobj` | Build output (installed to OpenRCT2) | (generated) |
-
-All three customizations are sprite **remaps** applied at build time, so reverting
-any of them is just editing the corresponding block in `build_parkobj.py` and
-rebuilding.
+Everything here is a build time sprite swap, so undoing any of it is just editing
+the matching block in `build_parkobj.py` and rebuilding.

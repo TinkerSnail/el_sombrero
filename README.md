@@ -1,61 +1,57 @@
 # El Sombrero 🌮
 
-A custom [OpenRCT2](https://openrct2.org) flat ride: a spinning wheel crowned
-with a giant rotating sombrero. It's built on the game's **Enterprise** ride type
-but reworked to behave like the real *El Sombrero* ride at Six Flags: it spins
-flat (with the usual start / stop / acceleration) instead of tilting up to
-vertical.
+A custom ride for [OpenRCT2](https://openrct2.org). It's a spinning wheel with a
+giant rotating sombrero on top. It started life as the game's Enterprise ride,
+but it spins flat the way the real El Sombrero at Six Flags does, instead of
+tilting all the way up to vertical.
 
 ![El Sombrero spinning in-game](media/demo.gif)
 
-> ▶️ Full-quality clip: [`media/demo.mp4`](media/demo.mp4)
+There's a full quality clip in [`media/demo.mp4`](media/demo.mp4).
 
 ## Install
 
-1. Download **`el_sombrero.parkobj`** from this repo (or from the
-   [Releases](../../releases) page).
-2. Drop it into your OpenRCT2 `object` folder:
-   - **macOS:** `~/Library/Application Support/OpenRCT2/object`
-   - **Windows:** `%USERPROFILE%\Documents\OpenRCT2\object`
-   - **Linux:** `~/.config/OpenRCT2/object`
-3. Launch OpenRCT2. El Sombrero appears in the ride list under **Thrill Rides**.
+1. Grab `el_sombrero.parkobj` from this repo or the [Releases](../../releases) page.
+2. Drop it into your OpenRCT2 object folder.
+   - macOS `~/Library/Application Support/OpenRCT2/object`
+   - Windows `%USERPROFILE%\Documents\OpenRCT2\object`
+   - Linux `~/.config/OpenRCT2/object`
+3. Start OpenRCT2 and look for El Sombrero in the Thrill Rides list.
 
-## Features
+## What's different from the stock Enterprise
 
-- **Flat spin**: holds a gentle fan-out tilt instead of flipping to vertical
-  like the stock Enterprise.
-- **Smooth rotation** at every spin speed (no jitter or stutter).
-- **Custom painted sombrero** crowning the wheel.
-- **Concrete pad** under the ride, with a shadow that sweeps as it spins.
-- Riders are drawn correctly without clipping through the hat.
+- It spins flat with a gentle fan out instead of tilting up to vertical.
+- The spin stays smooth at every speed, no jitter.
+- It wears a big painted sombrero.
+- It sits on a concrete pad, and the ride casts a shadow that sweeps across the
+  pad as it spins.
+- Riders don't poke through the hat.
 
 ![El Sombrero spinning on its concrete pad](media/screenshot.png)
 
-## Building from source
+## Building it yourself
 
-The ride is packed from source PNGs by a Python script:
+The ride gets packed from the source PNGs by a Python script. Run it like this.
 
 ```bash
 python3 build_parkobj.py
 ```
 
-This palette-converts the sprites, packs `images.dat`, and zips it with
-`object.json` into `el_sombrero.parkobj` (also installing it to your local
-OpenRCT2 object folder).
-
-Requires Python 3 with `Pillow` and `numpy`, plus an OpenRCT2 install (the script
-calls its `sprite build` command).
+That converts the sprites to the game palette, packs `images.dat`, zips
+everything into `el_sombrero.parkobj`, and drops a copy in your OpenRCT2 object
+folder. You'll need Python 3 with Pillow and numpy, plus OpenRCT2 installed (the
+script uses its sprite build command).
 
 ## How it works
 
-All of the custom behavior (flat spin, smooth rotation, rider occlusion) is
-implemented as build-time **sprite remaps** in `build_parkobj.py` - the source
-art, `manifest.json`, and `object.json` are never edited destructively. The full
-technical write-up, including the Enterprise frame layout and the tuning knobs,
-is in [`CUSTOMIZATIONS.md`](CUSTOMIZATIONS.md).
+Pretty much everything custom about this ride happens in `build_parkobj.py`. It
+shuffles around which source PNG each sprite uses, so the actual art files,
+`manifest.json`, and `object.json` stay untouched. If you want the full story on
+the frame layout and the tuning knobs, it's written up in
+[`CUSTOMIZATIONS.md`](CUSTOMIZATIONS.md).
 
 ## Credits
 
-Created by **TinkerSnail**. The wheel and car artwork is derived from
-RollerCoaster Tycoon 2's original Enterprise ride; the painted sombrero is
-original work. You need RollerCoaster Tycoon 2 game assets (via OpenRCT2) to play.
+Made by TinkerSnail. The wheel and car art comes from RollerCoaster Tycoon 2's
+Enterprise ride, and the sombrero is original. You'll need RollerCoaster Tycoon 2
+assets through OpenRCT2 to play.
