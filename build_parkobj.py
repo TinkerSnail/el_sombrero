@@ -13,7 +13,7 @@ OUT_PARKOBJ = BASE / "el_sombrero.parkobj"
 INSTALL_DIR = Path.home() / "Library/Application Support/OpenRCT2/object"
 OPENRCT2 = Path("/Applications/OpenRCT2.app/Contents/MacOS/openrct2")
 
-# RCT2 game palette extracted from rct1.ride.toilets.parkobj — 256 RGB triples
+# RCT2 game palette extracted from rct1.ride.toilets.parkobj - 256 RGB triples
 _RCT2_PALETTE_HEX = (
     "000000010101020202030303040404050505060606070707080808090909172323"
     "2333332f43433f53534b63635b73736f83838397979fafafb7c3c3d3dbdbeff3f"
@@ -78,10 +78,10 @@ def _nearest(palette_arr: np.ndarray, lookup: np.ndarray, rgb: np.ndarray) -> np
 # stays put while the wheel spins/tilts above it. It is baked into every wheel
 # frame *after* palette conversion (as a non-remap "safe" grey index) so it never
 # recolours and the cars keep their ride-colour-scheme indices.
-# NOTE: Disabled — it doesn't render in-game. A ground-level pad baked into the
+# NOTE: Disabled - it doesn't render in-game. A ground-level pad baked into the
 # flat-ride structure sprite gets painted over by the surrounding tiles' ground
 # (the ride is anchored to one tile; neighbouring tiles draw their terrain on top
-# of anything at ground level that spills onto them — only the elevated wheel
+# of anything at ground level that spills onto them - only the elevated wheel
 # survives). The original ENTERP's baked shadow is tiny for the same reason. To
 # put a pad under the ride, place path/floor scenery tiles around it in-game.
 ADD_CONCRETE_PAD = False
@@ -111,7 +111,7 @@ _CONCRETE_V, _SHADOW_V = CONCRETE_RGB[0], SHADOW_RGB[0]
 
 
 def _hash01(ix, iy):
-    """Deterministic pseudo-random in [0,1) from coords — world-static texture."""
+    """Deterministic pseudo-random in [0,1) from coords - world-static texture."""
     n = np.sin(ix * 12.9898 + iy * 78.233) * 43758.5453
     return n - np.floor(n)
 
@@ -172,7 +172,7 @@ def add_concrete_pad(palette_path, out_path, ox: int, oy: int):
 
 # --- Hand-painted concrete lip, propagated world-static -----------------------
 # Instead of a generated ellipse (which spilled past the ride footprint and got
-# occluded), we use the artist's actual painted concrete lip — proven to render
+# occluded), we use the artist's actual painted concrete lip - proven to render
 # because it hugs the wheel. _padart/world_pad.png holds that art in WORLD (screen)
 # coordinates (origin in world_pad.json); we stamp it under every wheel frame at
 # the right per-frame pixel position, in palette space (after colour conversion,
@@ -317,7 +317,7 @@ def to_palette_png(src_path: Path, out_path: Path, base_path: Path | None = None
         kept_base = (base_full > 0) & (nearest_any.astype(np.int32) == base_full)
         out = np.where(kept_base, base_full.astype(np.uint8), nearest_safe)
     else:
-        # No base reference (e.g. peep sprites 199-246) — use safe palette everywhere
+        # No base reference (e.g. peep sprites 199-246) - use safe palette everywhere
         out = nearest_safe
 
     out = np.where(opaque, out, TRANSPARENT).astype(np.uint8)
@@ -331,7 +331,7 @@ def to_palette_png(src_path: Path, out_path: Path, base_path: Path | None = None
 manifest = json.loads((BASE / "manifest.json").read_text())
 obj = json.loads((BASE / "object.json").read_text())
 
-# Real El Sombrero spins flat — it doesn't tilt to vertical like the Enterprise.
+# Real El Sombrero spins flat - it doesn't tilt to vertical like the Enterprise.
 # The Enterprise tilt is hardcoded in the sim, so we cap the *visible* tilt by
 # substituting sprites. The wheel sprites are laid out as 14 tilt BANDS of 12
 # rotation frames each, on a grid starting at frame 31 (frames 3-30 are the flat
@@ -342,10 +342,10 @@ obj = json.loads((BASE / "object.json").read_text())
 # remap every frame in a higher band to the SAME rotation step (same within-band
 # offset) of CAP_BAND. Using the true 12-frame period preserves rotation phase
 # exactly. (A previous version used %32, which assumed 32-frame bands and reset
-# the rotation phase every 12th frame at speed — that caused the spin to jitter.)
+# the rotation phase every 12th frame at speed - that caused the spin to jitter.)
 BAND_ORIGIN = 31
 BAND_LEN = 12
-CAP_BAND = 2  # frames 55..66 — the gentle fan-out tilt; raise for more, lower for less
+CAP_BAND = 2  # frames 55..66 - the gentle fan-out tilt; raise for more, lower for less
 cap_start = BAND_ORIGIN + CAP_BAND * BAND_LEN
 for i in range(cap_start + BAND_LEN, 199):
     phase = (i - BAND_ORIGIN) % BAND_LEN
@@ -356,7 +356,7 @@ for i in range(cap_start + BAND_LEN, 199):
 # BACK arc of the wheel land high on screen, over the sombrero cone, and clip it.
 # Each overlay frame has a FIXED baked screen position (its manifest y-offset),
 # and the engine assigns a back-position frame to whichever seat is currently at
-# the back (rotation = spin + CurrentRotation*4 + seatRotation) — so blanking just
+# the back (rotation = spin + CurrentRotation*4 + seatRotation) - so blanking just
 # the negative-y (back-arc) frames hides exactly the riders behind the cone, for
 # every camera rotation and throughout the spin, while front-arc riders still
 # render. Back cars show their closed shell anyway, so nothing is lost there.
@@ -364,7 +364,7 @@ BACK_ARC_Y_CUTOFF = 0  # blank overlays sitting at/above this screen y (near con
 for i in range(199, 247):
     if manifest[i]["y"] < BACK_ARC_Y_CUTOFF:
         manifest[i] = dict(manifest[1])  # 1x1 transparent placeholder → hidden
-    # else: front/near arc, clear of the cone — keep the original rider overlay
+    # else: front/near arc, clear of the cone - keep the original rider overlay
 
 # Build sprite manifest pointing at the right source file per frame
 tmp_dir = BASE / "_palette_tmp"
@@ -443,7 +443,7 @@ try:
         if -y > max_neg: max_neg = -y
         if y + h > max_pos: max_pos = y + h
 
-    # Only height changed (hat is above wheel) — keep original spriteWidth
+    # Only height changed (hat is above wheel) - keep original spriteWidth
     obj["properties"]["cars"]["spriteHeightNegative"] = max(max_neg, 128)
     obj["properties"]["cars"]["spriteHeightPositive"] = max(max_pos, 32)
     print(f"  sprite bounds: heightNeg={max(max_neg,128)}, heightPos={max(max_pos,32)}")

@@ -49,7 +49,7 @@ calls its `sprite build` command).
 ## How it works
 
 All of the custom behavior (flat spin, smooth rotation, rider occlusion) is
-implemented as build-time **sprite remaps** in `build_parkobj.py` — the source
+implemented as build-time **sprite remaps** in `build_parkobj.py` - the source
 art, `manifest.json`, and `object.json` are never edited destructively. The full
 technical write-up, including the Enterprise frame layout and the tuning knobs,
 is in [`CUSTOMIZATIONS.md`](CUSTOMIZATIONS.md).
