@@ -1,6 +1,6 @@
 # El Sombrero 🌮
 
-A custom [OpenRCT2](https://openrct2.org) flat ride — a spinning wheel crowned
+A custom [OpenRCT2](https://openrct2.org) flat ride: a spinning wheel crowned
 with a giant rotating sombrero. It's built on the game's **Enterprise** ride type
 but reworked to behave like the real *El Sombrero* ride at Six Flags: it spins
 flat (with the usual start / stop / acceleration) instead of tilting up to
