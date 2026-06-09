@@ -181,14 +181,42 @@ USE_WORLD_PAD = True
 PAD_BASE_RGB = (201, 198, 191)     # flat, evenly-lit concrete
 RIDE_SHADOW_RGB = (150, 147, 140)  # the spinning ride's shadow on the concrete
 SHADOW_SHIFT = (-3, 6)             # project ride silhouette down-left (light upper-right)
+PAD_FILL_RADIUS = 11               # close car-shaped notches so no dirt shows through
 _pad_base_index = int(_nearest(_safe_arr, _safe_lookup, np.array([PAD_BASE_RGB], np.int32))[0])
 _ride_shadow_index = int(_nearest(_safe_arr, _safe_lookup, np.array([RIDE_SHADOW_RGB], np.int32))[0])
-# Keep only the SHAPE of the artist's painted lip; the static blurry shadow the
-# union picked up is dropped and recreated dynamically per frame (see stamp fn).
+
+
+def _dilate(m, r):
+    """Binary dilation by a disk of radius r (numpy-only)."""
+    H, W = m.shape
+    out = np.zeros_like(m)
+    ys, xs = np.where(m)
+    yy, xx = np.ogrid[-r:r + 1, -r:r + 1]
+    for dy, dx in (np.argwhere(yy * yy + xx * xx <= r * r) - r):
+        y2, x2 = ys + dy, xs + dx
+        v = (y2 >= 0) & (y2 < H) & (x2 >= 0) & (x2 < W)
+        out[y2[v], x2[v]] = True
+    return out
+
+
+def _fill_notches(m, r):
+    """Morphological closing: bridge the car-shaped notches into a solid crescent.
+    The filled-in area sits up under the wheel, which is drawn on top and hides it;
+    only the solid outer lip stays visible, so no dirt peeks through when spinning."""
+    p = r + 2
+    mp = np.pad(m, p)
+    closed = ~_dilate(~_dilate(mp, r), r)   # dilate then erode
+    return closed[p:-p, p:-p]
+
+
+# Keep only the SHAPE of the artist's painted lip (notches filled); the static
+# blurry shadow the union picked up is dropped and recreated dynamically per
+# frame (see stamp_world_pad).
 _wp_path = BASE / "_padart" / "world_pad.png"
 if USE_WORLD_PAD and _wp_path.exists():
     _wp_meta = json.loads((BASE / "_padart" / "world_pad.json").read_text())
     _wp_alpha = np.array(Image.open(_wp_path).convert("RGBA"))[:, :, 3] >= 128
+    _wp_alpha = _fill_notches(_wp_alpha, PAD_FILL_RADIUS)
     _wp_ox, _wp_oy = _wp_meta["world_origin"]   # world coord of pad pixel (0,0)
 
 
