@@ -6,6 +6,10 @@ but reworked to behave like the real *El Sombrero* ride at Six Flags: it spins
 flat (with the usual start / stop / acceleration) instead of tilting up to
 vertical.
 
+![El Sombrero spinning in-game](media/demo.gif)
+
+> ▶️ Full-quality clip: [`media/demo.mp4`](media/demo.mp4)
+
 ## Install
 
 1. Download **`el_sombrero.parkobj`** from this repo (or from the
@@ -23,6 +27,8 @@ vertical.
 - **Smooth rotation** at every spin speed (no jitter or stutter).
 - **Custom painted sombrero** crowning the wheel.
 - Riders are drawn correctly without clipping through the hat.
+
+![El Sombrero in a park, next to a pyramid](media/screenshot.png)
 
 ## Building from source
 
