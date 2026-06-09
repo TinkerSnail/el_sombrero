@@ -26,9 +26,10 @@ vertical.
   like the stock Enterprise.
 - **Smooth rotation** at every spin speed (no jitter or stutter).
 - **Custom painted sombrero** crowning the wheel.
+- **Concrete pad** under the ride, with a shadow that sweeps as it spins.
 - Riders are drawn correctly without clipping through the hat.
 
-![El Sombrero in a park, next to a pyramid](media/screenshot.png)
+![El Sombrero spinning on its concrete pad](media/screenshot.png)
 
 ## Building from source
 
