@@ -18,7 +18,7 @@ vertical.
 
 ## Features
 
-- **Flat spin** — holds a gentle fan-out tilt instead of flipping to vertical
+- **Flat spin**: holds a gentle fan-out tilt instead of flipping to vertical
   like the stock Enterprise.
 - **Smooth rotation** at every spin speed (no jitter or stutter).
 - **Custom painted sombrero** crowning the wheel.
