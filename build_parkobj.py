@@ -71,6 +71,183 @@ def _nearest(palette_arr: np.ndarray, lookup: np.ndarray, rgb: np.ndarray) -> np
     return lookup[np.argmin(dists, axis=1)] if lookup is not None else np.argmin(dists, axis=1).astype(np.uint8)
 
 
+# --- Concrete ground pad ------------------------------------------------------
+# Paint a light-grey concrete disc on the ground under the wheel so the ride sits
+# on a pad instead of bare dirt. The pad is a screen-space ellipse (a circle in
+# isometric view) placed at the ride's FIXED ground-centre in world space, so it
+# stays put while the wheel spins/tilts above it. It is baked into every wheel
+# frame *after* palette conversion (as a non-remap "safe" grey index) so it never
+# recolours and the cars keep their ride-colour-scheme indices.
+# NOTE: Disabled — it doesn't render in-game. A ground-level pad baked into the
+# flat-ride structure sprite gets painted over by the surrounding tiles' ground
+# (the ride is anchored to one tile; neighbouring tiles draw their terrain on top
+# of anything at ground level that spills onto them — only the elevated wheel
+# survives). The original ENTERP's baked shadow is tiny for the same reason. To
+# put a pad under the ride, place path/floor scenery tiles around it in-game.
+ADD_CONCRETE_PAD = False
+PAD_WORLD = (-4, 34)      # ground-centre in manifest-offset space (x, y)
+PAD_RX, PAD_RY = 84, 42   # ellipse radii in px (~2:1 for the iso ground plane)
+CONCRETE_RGB = (206, 203, 196)
+TEXTURE_GRAIN = 5.0       # fine per-pixel concrete speckle (brightness units)
+TEXTURE_MOTTLE = 4.0      # broader mottling amplitude
+# Soft shadow of the wheel cast onto the pad (the painted El Sombrero art dropped
+# the shadow the original ENTERP sprite had baked in). A smooth penumbra darkens
+# the concrete under the wheel, offset toward the lower-left to match RCT2's light.
+ADD_PAD_SHADOW = True
+SHADOW_RX, SHADOW_RY = 70, 35       # ~ the disc's ground footprint
+SHADOW_OFFSET = (-5, 4)             # px offset from PAD_WORLD (lower-left)
+SHADOW_RGB = (150, 147, 140)        # darkest grey at the shadow's core
+SHADOW_INNER, SHADOW_OUTER = 0.30, 1.12  # penumbra band (wider gap = softer fade)
+
+# Greyscale LUT: brightness 0..255 -> nearest non-remap palette index, keeping the
+# concrete's slight warm tint. Lets us paint a smooth textured/shaded gradient.
+_tint = (CONCRETE_RGB[1] / CONCRETE_RGB[0], CONCRETE_RGB[2] / CONCRETE_RGB[0])
+_lut_v = np.arange(256)
+_lut_cols = np.clip(
+    np.stack([_lut_v, _lut_v * _tint[0], _lut_v * _tint[1]], axis=1), 0, 255
+).astype(np.int32)
+_gray_lut = _nearest(_safe_arr, _safe_lookup, _lut_cols)   # (256,) uint8
+_CONCRETE_V, _SHADOW_V = CONCRETE_RGB[0], SHADOW_RGB[0]
+
+
+def _hash01(ix, iy):
+    """Deterministic pseudo-random in [0,1) from coords — world-static texture."""
+    n = np.sin(ix * 12.9898 + iy * 78.233) * 43758.5453
+    return n - np.floor(n)
+
+
+def add_concrete_pad(palette_path, out_path, ox: int, oy: int):
+    """Composite the textured, soft-shadowed ground pad under a palettised sprite.
+
+    The pad's texture and shadow are sampled in WORLD (screen) coordinates so they
+    stay locked to the ground as the wheel spins; the original sprite is laid on
+    top so the wheel/cars occlude the pad where they overlap. Returns new (ox, oy).
+    """
+    img = Image.open(palette_path)
+    if img.mode != "P":
+        img = img.convert("P")
+    idx = np.array(img)                        # (h, w) palette indices
+    h, w = idx.shape
+    cx, cy = PAD_WORLD[0] - ox, PAD_WORLD[1] - oy
+
+    minx, miny = min(0, cx - PAD_RX), min(0, cy - PAD_RY)
+    maxx, maxy = max(w, cx + PAD_RX + 1), max(h, cy + PAD_RY + 1)
+    W, H = int(maxx - minx), int(maxy - miny)
+    sx, sy = int(-minx), int(-miny)
+    new_ox, new_oy = ox - sx, oy - sy
+
+    # world (screen) coord of every output pixel → texture/shadow stay world-static
+    wx = (new_ox + np.arange(W))[None, :].astype(np.float64)   # (1, W)
+    wy = (new_oy + np.arange(H))[:, None].astype(np.float64)   # (H, 1)
+    dx, dy = wx - PAD_WORLD[0], wy - PAD_WORLD[1]
+    mask = (dx / PAD_RX) ** 2 + (dy / PAD_RY) ** 2 <= 1.0       # (H, W)
+
+    ix = np.broadcast_to(wx, (H, W)); iy = np.broadcast_to(wy, (H, W))
+    val = np.full((H, W), float(_CONCRETE_V))
+    val += (_hash01(ix, iy) - 0.5) * 2 * TEXTURE_GRAIN                       # grain
+    val += (_hash01(np.floor(ix / 5), np.floor(iy / 3)) - 0.5) * 2 * TEXTURE_MOTTLE
+
+    if ADD_PAD_SHADOW:
+        sdx, sdy = wx - (PAD_WORLD[0] + SHADOW_OFFSET[0]), wy - (PAD_WORLD[1] + SHADOW_OFFSET[1])
+        r = np.sqrt((sdx / SHADOW_RX) ** 2 + (sdy / SHADOW_RY) ** 2)
+        t = np.clip((SHADOW_OUTER - r) / (SHADOW_OUTER - SHADOW_INNER), 0.0, 1.0)
+        t = t * t * (3 - 2 * t)                # smoothstep penumbra
+        val -= (_CONCRETE_V - _SHADOW_V) * t
+
+    pad_idx = _gray_lut[np.clip(val, 0, 255).astype(np.int32)]
+    out = np.where(mask, pad_idx, 0).astype(np.uint8)
+
+    # lay the original sprite on top (non-transparent pixels win)
+    region = out[sy:sy + h, sx:sx + w]
+    op = idx != 0
+    region[op] = idx[op]
+    out[sy:sy + h, sx:sx + w] = region
+
+    new = Image.new("P", (W, H))
+    new.putpalette(list(RCT2_PALETTE))
+    new.putdata(out.flatten().tolist())
+    new.save(out_path, transparency=0)
+    return new_ox, new_oy
+
+
+# --- Hand-painted concrete lip, propagated world-static -----------------------
+# Instead of a generated ellipse (which spilled past the ride footprint and got
+# occluded), we use the artist's actual painted concrete lip — proven to render
+# because it hugs the wheel. _padart/world_pad.png holds that art in WORLD (screen)
+# coordinates (origin in world_pad.json); we stamp it under every wheel frame at
+# the right per-frame pixel position, in palette space (after colour conversion,
+# so the cars keep their remap/recolour indices). World-static => no flicker.
+USE_WORLD_PAD = True
+PAD_BASE_RGB = (201, 198, 191)     # flat, evenly-lit concrete
+RIDE_SHADOW_RGB = (150, 147, 140)  # the spinning ride's shadow on the concrete
+SHADOW_SHIFT = (-3, 6)             # project ride silhouette down-left (light upper-right)
+_pad_base_index = int(_nearest(_safe_arr, _safe_lookup, np.array([PAD_BASE_RGB], np.int32))[0])
+_ride_shadow_index = int(_nearest(_safe_arr, _safe_lookup, np.array([RIDE_SHADOW_RGB], np.int32))[0])
+# Keep only the SHAPE of the artist's painted lip; the static blurry shadow the
+# union picked up is dropped and recreated dynamically per frame (see stamp fn).
+_wp_path = BASE / "_padart" / "world_pad.png"
+if USE_WORLD_PAD and _wp_path.exists():
+    _wp_meta = json.loads((BASE / "_padart" / "world_pad.json").read_text())
+    _wp_alpha = np.array(Image.open(_wp_path).convert("RGBA"))[:, :, 3] >= 128
+    _wp_ox, _wp_oy = _wp_meta["world_origin"]   # world coord of pad pixel (0,0)
+
+
+def _shift_mask(m, dx, dy):
+    """Boolean mask shifted by (dx, dy), clipped to bounds."""
+    out = np.zeros_like(m)
+    H, W = m.shape
+    ys, xs = np.where(m)
+    ny, nx = ys + dy, xs + dx
+    v = (ny >= 0) & (ny < H) & (nx >= 0) & (nx < W)
+    out[ny[v], nx[v]] = True
+    return out
+
+
+def stamp_world_pad(palette_path, out_path, ox: int, oy: int):
+    """Flat concrete lip (static) + the ride's shadow cast onto it per frame.
+
+    The lip is filled with even concrete; the shadow is made by projecting THIS
+    frame's wheel silhouette down-left onto the lip, so it sweeps as the cars
+    spin. Done in palette space, so the cars keep their remap/recolour indices.
+    """
+    img = Image.open(palette_path)
+    if img.mode != "P":
+        img = img.convert("P")
+    idx = np.array(img)
+    h, w = idx.shape
+    ph, pw = _wp_alpha.shape
+    px0, py0 = _wp_ox - ox, _wp_oy - oy
+    minx, miny = min(0, px0), min(0, py0)
+    maxx, maxy = max(w, px0 + pw), max(h, py0 + ph)
+    W, H = int(maxx - minx), int(maxy - miny)
+    sx, sy = int(-minx), int(-miny)
+    out = np.zeros((H, W), dtype=np.uint8)
+
+    # flat concrete lip
+    pad_mask = np.zeros((H, W), dtype=bool)
+    pxs, pys = px0 + sx, py0 + sy
+    pad_mask[pys:pys + ph, pxs:pxs + pw] = _wp_alpha
+    out[pad_mask] = _pad_base_index
+
+    # ride's moving shadow: project this frame's wheel silhouette onto the lip
+    wheel = np.zeros((H, W), dtype=bool)
+    wheel[sy:sy + h, sx:sx + w] = idx != 0
+    shadow = _shift_mask(wheel, SHADOW_SHIFT[0], SHADOW_SHIFT[1])
+    out[pad_mask & shadow] = _ride_shadow_index
+
+    # wheel/cars on top (occlude the lip where they overlap)
+    wreg = out[sy:sy + h, sx:sx + w]
+    op = idx != 0
+    wreg[op] = idx[op]
+    out[sy:sy + h, sx:sx + w] = wreg
+
+    new = Image.new("P", (W, H))
+    new.putpalette(list(RCT2_PALETTE))
+    new.putdata(out.flatten().tolist())
+    new.save(out_path, transparency=0)
+    return ox - sx, oy - sy
+
+
 def to_palette_png(src_path: Path, out_path: Path, base_path: Path | None = None) -> None:
     """Convert RGBA PNG to RCT2-palette-indexed PNG.
 
@@ -187,7 +364,20 @@ for i, entry in enumerate(manifest):
         base_ref = BASE / "_base_sprites" / f"{src_basename}.png"
         to_palette_png(src, palette_src, base_ref if base_ref.exists() else None)
 
-    sprite_manifest.append({"path": str(palette_src), "x": entry["x"], "y": entry["y"]})
+    sprite_path, x, y = str(palette_src), entry["x"], entry["y"]
+
+    # Stamp the hand-painted concrete lip under every wheel frame (3..198),
+    # world-static so it stays put as the wheel spins/tilts.
+    if USE_WORLD_PAD and _wp_path.exists() and 3 <= i <= 198:
+        cpath = tmp_dir / f"pad_{i:03d}.png"
+        x, y = stamp_world_pad(palette_src, cpath, x, y)
+        sprite_path = str(cpath)
+    elif ADD_CONCRETE_PAD and 3 <= i <= 198:
+        cpath = tmp_dir / f"concrete_{i:03d}.png"
+        x, y = add_concrete_pad(palette_src, cpath, x, y)
+        sprite_path = str(cpath)
+
+    sprite_manifest.append({"path": sprite_path, "x": x, "y": y})
 
 print(f"  converted {sum(1 for e in sprite_manifest if '_palette_tmp' in e['path'])} sprites to palette mode")
 

@@ -5,7 +5,7 @@ behave like the real *El Sombrero* ride at Six Flags: it spins flat (with the
 usual start/stop/acceleration) instead of tilting up to vertical, and it wears a
 tall painted sombrero in the center of the wheel.
 
-This document records the three custom behaviors we built on top of the stock
+This document records the custom behaviors we built on top of the stock
 Enterprise, *why* each was needed, and *how* each works — so the build can be
 understood and tuned later.
 
@@ -18,11 +18,13 @@ understood and tuned later.
 | 1 | **Flat spin (no tilt to vertical)** | `build_parkobj.py` tilt-cap block | Substitute high-tilt wheel sprites with a capped tilt band |
 | 2 | **Smooth spin at all speeds** | same block | Use the *true* 12-frame tilt-band period so rotation phase is preserved |
 | 3 | **No riders clipping the sombrero** | `build_parkobj.py` overlay block | Blank only the back-arc seated-rider overlays (by screen position) |
+| 4 | **Concrete pad + moving shadow** | `build_parkobj.py` `stamp_world_pad` | Stamp a flat concrete lip under every wheel frame, world-static, with a per-frame ride shadow projected onto it |
 
-All three are implemented purely in the **build script** by remapping which
-source PNG each sprite slot uses. `manifest.json`, `object.json`, and the source
-art in `sprites/` are **never modified on disk** — so every change is reversible
-by editing `build_parkobj.py` and rebuilding.
+Customizations 1–3 are implemented purely in the **build script** by remapping
+which source PNG each sprite slot uses; `manifest.json`, `object.json`, and the
+source art in `sprites/` are **never modified on disk**. Customization 4 adds a
+small piece of source art in `_padart/`. Every change is reversible by editing
+`build_parkobj.py` and rebuilding.
 
 ---
 
@@ -179,6 +181,47 @@ With the cutoff at `0`, this hides 21 back-arc frames and keeps 27 front frames:
 nicks the cone's brim; **raise** it (e.g. `+5`) if too many riders disappear.
 
 ---
+
+## Customization 4 — Concrete pad with a moving shadow
+
+**Goal.** Sit the ride on a light concrete pad instead of bare dirt.
+
+**The hard constraint.** A pad baked into the wheel sprite only renders if it
+stays **within the ride's own footprint tiles**. A large ground ellipse spills
+onto neighboring tiles, whose ground is painted *after* the ride sprite and
+covers it (the elevated wheel escapes this; a ground-level pad does not). So the
+pad has to hug the wheel — it's the **visible front lip** of a pad, not a full
+plaza.
+
+**The art.** The lip shape was hand-painted, then reduced to a single
+world-positioned template: `_padart/world_pad.png` (the lip's alpha shape) plus
+`_padart/world_pad.json` (its origin in world/offset coordinates). Only the
+*shape* is used — it's filled with flat concrete at build time.
+
+**The build** (`stamp_world_pad`, applied to wheel frames 3–198): after palette
+conversion (so the cars keep their remap/recolour indices), for each frame it
+
+1. fills the lip shape with flat concrete (`PAD_BASE_RGB`), placed at its fixed
+   world position (`world_origin − frame_offset`), so it's **static** as the
+   wheel spins;
+2. casts the **ride's shadow** onto the lip by projecting *this frame's* wheel
+   silhouette by `SHADOW_SHIFT` and darkening the lip there (`RIDE_SHADOW_RGB`) —
+   because the silhouette rotates frame to frame, the shadow **sweeps**;
+3. lays the wheel/cars back on top so they occlude the lip where they overlap.
+
+This keeps the concrete static (it's the ground) while the shadow is dynamic (the
+ride above it moves) — and never touches the car pixels, so no recolour is lost.
+
+### Tuning
+
+- `SHADOW_SHIFT = (-3, 6)` — shadow direction/length (down-left). Bigger `y`
+  exposes more lit concrete beyond the shadow, making the motion more visible.
+- `RIDE_SHADOW_RGB` / `PAD_BASE_RGB` — shadow darkness / concrete shade.
+- `USE_WORLD_PAD = False` disables the pad entirely.
+
+> The pad template in `_padart/` is regenerated from hand-painted frames by a
+> one-off extraction (union of the painted frames in world coordinates); the
+> committed `world_pad.png` is the result, so normal rebuilds just reuse it.
 
 ## Verification checklist
 

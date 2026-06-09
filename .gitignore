@@ -10,6 +10,10 @@ _palette_tmp/
 _images.dat
 _sprite_manifest.json
 
+# Working scratch (sprite exports, edit backups) — derived, not needed to build
+_exported_sprites/
+_edit_backup/
+
 # Local tooling / backups
 .claude/
 config.ini.bak
