@@ -18,9 +18,6 @@ There's a full quality clip in [`media/demo.mp4`](media/demo.mp4).
    - Linux `~/.config/OpenRCT2/object`
 3. Start OpenRCT2 and look for El Sombrero in the Thrill Rides list.
 
-## What's different from the stock Enterprise
-
-- It wears a big painted sombrero.
 
 ![El Sombrero spinning on its concrete pad](media/screenshot.png)
 
