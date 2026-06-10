@@ -20,12 +20,7 @@ There's a full quality clip in [`media/demo.mp4`](media/demo.mp4).
 
 ## What's different from the stock Enterprise
 
-- It spins flat with a gentle fan out instead of tilting up to vertical.
-- The spin stays smooth at every speed, no jitter.
 - It wears a big painted sombrero.
-- It sits on a concrete pad, and the ride casts a shadow that sweeps across the
-  pad as it spins.
-- Riders don't poke through the hat.
 
 ![El Sombrero spinning on its concrete pad](media/screenshot.png)
 
