@@ -31,7 +31,9 @@ There's a full quality clip in [`media/demo.mp4`](media/demo.mp4).
 
 ## Building it yourself
 
-The ride gets packed from the source PNGs by a Python script. Run it like this.
+The ride gets packed from the source PNGs by a Python script. You'll need Python 3
+with Pillow and numpy, which you can grab with `pip install pillow numpy`, plus
+OpenRCT2 installed (the script borrows its sprite build command). Then run it.
 
 ```bash
 python3 build_parkobj.py
@@ -39,8 +41,10 @@ python3 build_parkobj.py
 
 That converts the sprites to the game palette, packs `images.dat`, zips
 everything into `el_sombrero.parkobj`, and drops a copy in your OpenRCT2 object
-folder. You'll need Python 3 with Pillow and numpy, plus OpenRCT2 installed (the
-script uses its sprite build command).
+folder.
+
+If you're not on a Mac, open `build_parkobj.py` and edit the two paths near the
+top (the OpenRCT2 app and the object folder), since they're set up for macOS.
 
 ## How it works
 
