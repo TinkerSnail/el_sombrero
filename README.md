@@ -1,4 +1,4 @@
-# El Sombrero 🌮
+# "El Sombrero Rides Again!" 
 
 A custom ride for [OpenRCT2](https://openrct2.org). It's a spinning wheel with a
 giant rotating sombrero on top. It started life as the game's Enterprise ride,
