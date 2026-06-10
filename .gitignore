@@ -15,5 +15,4 @@ _exported_sprites/
 _edit_backup/
 
 # Local tooling / backups
-.claude/
 config.ini.bak
